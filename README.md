@@ -1,61 +1,37 @@
-# Shadow Stack
+# Shadow Stack 2.0
 
-Shadow Stack is a web application that analyzes a website's publicly available signals to estimate the technologies behind it. Enter a domain and it generates a concise overview of the site's framework, hosting platform, rendering strategy, security headers, and other implementation details.
+Shadow Stack is a web architecture intelligence platform. It observes a live production website, extracts verifiable technical signals, derives architecture inferences with explicit confidence and evidence, and scores measurable dimensions such as architecture, performance, security, and delivery.
 
-## Features
+## 2.0 architecture
 
-* Analyze any public website by domain
-* Detect frameworks, platforms, and rendering patterns
-* Inspect HTTP headers and security configuration
-* Identify caching, compression, and performance hints
-* Cache scan results with Redis
-* Generate an overall architecture score
-
-## Tech Stack
-
-* Next.js 16
-* React 19
-* TypeScript
-* Tailwind CSS
-* shadcn/ui
-* Upstash Redis
-* Axios
-* Cheerio
-* Playwright
-* Zod
-
-## Getting Started
-
-Install dependencies:
-
-```bash
-npm install
+```text
+URL
+ ↓
+Page Collector
+ ↓
+Signal Extraction
+ ↓
+Evidence-backed Inference
+ ↓
+Dimension Scoring
+ ↓
+Report
 ```
 
-Configure the required environment variables:
+### Design principles
 
-```bash
-UPSTASH_REDIS_REST_URL=your_redis_url
-UPSTASH_REDIS_REST_TOKEN=your_redis_token
-```
+- **Observation is not inference.** A response header or HTML marker is an observed signal; it is not automatically a claim about the entire architecture.
+- **AI is not the source of truth.** The future AI analyst will explain and synthesize deterministic evidence rather than inventing technical facts.
+- **Confidence is explicit.** Inferences expose confidence and their supporting evidence.
+- **Measurements are separated from opinions.** Response time, payload size, and headers are measurements; architecture recommendations are interpretations.
+- **The scanner is prepared for asynchronous execution.** The collector/analyzer boundaries make it possible to move scans to workers and queues without rewriting the domain logic.
 
-Start the development server:
+## Roadmap
 
-```bash
-npm run dev
-```
-
-Visit `http://localhost:3000` and scan a domain.
-
-## Scripts
-
-```bash
-npm run dev     # Start the development server
-npm run build   # Build for production
-npm run start   # Run the production build
-npm run lint    # Run ESLint
-```
-
-## Notes
-
-Shadow Stack relies on publicly observable data and heuristic detection. The reported technologies are best viewed as informed estimates rather than definitive results.
+1. Evidence-based scanner — current
+2. Browser instrumentation with Playwright
+3. Deeper architecture inference engine
+4. AI Architect with grounded explanations
+5. Historical snapshots and architecture diffs
+6. Queue/worker execution, rate limiting, retries and idempotency
+7. OpenTelemetry-based observability

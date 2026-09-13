@@ -1,88 +1,50 @@
 import { redis } from "@/lib/redis";
 import { parseDomain } from "@/lib/domain";
-import { scanHTML } from "@/lib/scrapers/html";
-import { scanHeaders } from "@/lib/scrapers/headers";
-import { scanNetwork } from "@/lib/scrapers/network";
-import { scanSecurity } from "./scrapers/security";
-import { scanPerf } from "./scrapers/perf";
-import { scanPlatform } from "./scrapers/platform";
-import { scanAPI } from "./scrapers/api";
-import { computeModernity } from "./score";
-import { ScanResult } from "./types";
+import type { ScanResult } from "@/lib/types";
+import { collectPage } from "@/lib/scanner/collector";
+import { extractSignals } from "@/lib/scanner/signals";
+import { inferArchitecture } from "@/lib/analyzers/inference";
+import { computeScores } from "@/lib/scoring";
 
 export async function scan(rawInput: string): Promise<ScanResult> {
-  const parsed = parseDomain(rawInput);
+  const domain = parseDomain(rawInput);
+  if (!domain) throw new Error("Invalid domain");
 
-  if (!parsed) {
-    throw new Error("Invalid domain");
-  }
-
-  const domain = parsed;
-
-  const cacheKey = `scan:${domain}`;
-  const cached: ScanResult | null = await redis.get(cacheKey);
+  const cacheKey = `scan:v2:${domain}`;
+  const cached = await redis.get<ScanResult>(cacheKey);
   if (cached) return cached;
 
-  let head;
+  const started = performance.now();
+  let page;
   try {
-    head = await fetch(`https://${domain}`, { method: "HEAD" });
+    page = await collectPage(domain);
   } catch {
     throw new Error("Website not reachable");
   }
 
-  if (!head.ok) {
-    throw new Error("Website not reachable");
-  }
+  if (!page.status || page.status >= 500) throw new Error("Website not reachable");
 
-  const [html, headers, network, perf, security, platform, api] =
-    await Promise.all([
-      scanHTML(domain),
-      scanHeaders(domain),
-      scanNetwork(domain),
-      scanPerf(domain),
-      scanSecurity(domain),
-      scanPlatform(domain),
-      scanAPI(domain),
-    ]);
+  const signals = extractSignals(page);
+  if (!signals.length) throw new Error("No architecture signals found");
 
-  const all = [
-    ...html,
-    ...headers,
-    ...network,
-    ...perf,
-    ...security,
-    ...platform,
-    ...api,
-  ];
+  const inferences = inferArchitecture(signals);
+  const scores = computeScores(signals);
+  const warnings: string[] = [];
 
-  const modernity = computeModernity(all);
+  if (page.status >= 400) warnings.push(`The origin returned HTTP ${page.status}. Some signals may be incomplete.`);
+  if (!signals.some((s) => s.category === "framework")) warnings.push("No high-confidence framework marker was detected. The framework may be hidden or unsupported.");
+  if (!signals.some((s) => s.key === "rendering" && s.value === "RSC")) warnings.push("RSC was not detected. This does not prove that the application is not server-rendered.");
 
-  if (all.length === 0) {
-    throw new Error("No architecture signals found");
-  }
-  const grouped: Record<string, { value: string; confidence: number }[]> = {};
-
-  for (const s of all) {
-    if (!grouped[s.key]) grouped[s.key] = [];
-    grouped[s.key].push({ value: s.value, confidence: s.confidence });
-  }
-
-  const architecture = Object.entries(grouped).map(([key, values]) => {
-    const best = values.sort((a, b) => b.confidence - a.confidence)[0];
-    return {
-      key,
-      value: best.value,
-      confidence: best.confidence,
-    };
-  });
   const result: ScanResult = {
     domain,
     scannedAt: new Date().toISOString(),
-    architecture,
-    modernity,
+    durationMs: Math.round(performance.now() - started),
+    architecture: signals,
+    inferences,
+    scores,
+    warnings,
   };
 
   await redis.set(cacheKey, result, { ex: 60 * 60 * 24 });
-
   return result;
 }
